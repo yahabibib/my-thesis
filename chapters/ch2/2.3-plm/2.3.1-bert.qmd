@@ -1,0 +1,11 @@
+### 2.3.1 深度上下文表征
+
+传统的词嵌入方法（如 Word2Vec, GloVe）基于“一词一义”的静态假设，将每个离散符号映射为特征空间中唯一的固定向量。这种上下文无关的表征方式无法有效处理一词多义（Polysemy）现象。Devlin 等人提出的 BERT（Bidirectional Encoder Representations from Transformers）通过引入深层双向预训练机制，标志着自然语言处理正式进入了动态表征的新范式 [@Devlin2019]。
+
+BERT 的核心架构由多层双向 Transformer 编码器堆叠而成 。其关键创新在于利用多头自注意力机制（Multi-Head Self-Attention）并行捕捉文本序列中的全域依赖关系。对于输入序列 $X$，第 $l$ 层的注意力计算公式定义为：
+
+$$
+\text{Attention}(Q,K,V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+$$
+
+其中 $Q, K, V$ 分别为查询、键和值矩阵，$d_k$ 为缩放因子。更为重要的是，通过**掩码语言建模（Masked Language Modeling, MLM）**任务，BERT 驱动模型习得了**上下文嵌入（Contextual Embedding）**的本质特征。在数学意义上，MLM 优化的是条件概率 $P(w_i | \text{context})$，这使得生成的实体嵌入不再是静态映射，而是依赖于语境的动态函数。这意味着同一个词法符号将根据其周围上下文的不同（例如在不同法律条文中的“当事人”），被映射到高维向量空间中的不同位置。这一机制为解决**实体歧义（Entity Ambiguity）**提供了根本性的数学基础，使得模型能够生成具有高度区分性的动态语义表征。

@@ -1,0 +1,20 @@
+---
+title: "摘要"
+number-sections: false
+---
+
+# 摘要 {.unnumbered}
+
+这里是中文摘要内容。
+
+随着海洋强国战略的深入实施......（此处填入你的摘要）
+
+**关键词：** 联邦学习，知识图谱，实体对齐，海洋法
+
+# Abstract {.unnumbered}
+
+Here is the English abstract.
+
+With the implementation of the strategy of maritime power...
+
+**Keywords:** Federated Learning, Knowledge Graph, Entity Alignment, Law of the Sea

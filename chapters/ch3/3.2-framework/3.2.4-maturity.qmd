@@ -1,0 +1,48 @@
+### 3.2.4 联邦成熟度控制与双模互补推理
+
+尽管 Phase 2 确立了以语义锚点为核心的训练目标，但在联邦结构对齐的初期 (**Cold Start**)，系统仍面临着严峻的稳定性挑战。由于私有结构编码器（如 GCN）的参数 $\Theta_{pri}$ 是随机初始化的，其生成的特征质量远低于经过 Phase 1 微调的 SBERT 锚点。若在此时过早地利用结构特征生成伪标签 (**Pseudo-labels**) 或参与高权重的自适应聚合，极易引入不可逆的 **“噪声传播 (Noise Propagation)”**，导致全局模型在错误的方向上震荡发散。为此，FedAnchor 设计了质量感知的成熟度控制机制与双模互补推理策略，以确保从预热到推理的平稳过渡。
+
+#### 1 质量感知的成熟度控制
+
+为了防御训练初期的噪声风险，我们在客户端引入了 **联邦成熟度检查机制 (Federated Maturity Check Mechanism)**。该机制的核心逻辑是将 SBERT 锚点在验证集上的性能指标（如 Hits@1）作为基准线 $M_{anchor}$，实时监控本地结构模型的性能演进。
+
+形式化地，设第 $r$ 轮通信时本地结构模型的验证集得分为 $M_{struct}^{(r)}$。我们定义一个状态指示函数 $\text{State}(r)$ 来决定当前轮次的训练行为模式：
+
+$$
+\text{State}(r) = \begin{cases} 
+\text{Mature (Self-Training)}, & \text{if } M_{struct}^{(r)} \ge \lambda \cdot M_{anchor} \\
+\text{Immature (Safe Mode)}, & \text{otherwise} 
+\end{cases}
+$$
+
+其中 $\lambda \in [0, 1]$ 是一个预设的 **耐心因子 (Patience Factor, e.g., 0.75)**，用于控制进入成熟态的严格程度。
+
+* **非成熟态 (Immature / Safe Mode)**：
+    当模型处于此状态时（通常在 Phase 2 的前几轮），系统判定结构特征尚未准备好。此时，客户端被强制锁定在“保护模式”：仅允许利用 InfoNCE 损失函数单向逼近静态的语义锚点，严格禁止利用结构特征挖掘新的伪标签，也禁止更新锚点目标。这有效阻断了低质量结构特征生成的错误监督信号进入训练循环。
+
+* **成熟态 (Mature / Self-Training Mode)**：
+    一旦结构模型的性能突破了 $\lambda \cdot M_{anchor}$ 的阈值，系统即刻解锁自适应功能。此时，模型被允许根据结构相似度挖掘互补的对齐关系 (**Bootstrapping**)，并开启特征融合机制，进入“以结构补语义，以语义校结构”的良性循环。
+
+::: {#fig-maturity-control}
+![](images/maturity_control_logic.png){width=85%}
+
+**Figure 3.5: 联邦成熟度控制逻辑流程图 (Maturity Control Logic)**。
+*(流程描述：输入为当前轮次的结构编码器与验证集。首先计算 $M_{struct}$，随后进入菱形判断框判断 "$M_{struct} \ge \lambda \cdot M_{anchor}$ ?"。若为 No (左侧路径)，则指向 "Safe Mode"，仅最小化 $\mathcal{L}_{InfoNCE}$ 并跳过伪标签挖掘；若为 Yes (右侧路径)，则指向 "Self-Training Mode"，开启自适应挖掘并更新训练目标。)*
+:::
+
+#### 2 双模特征融合策略
+
+在推理阶段，考虑到知识图谱对齐任务中“语义视图”与“结构视图”存在显著的互补性——SBERT 擅长捕捉字面描述高度相似的实体（如 *Harry Potter* vs. *Harry Potter (Film)*），而 GCN 擅长捕捉字面不同但拓扑邻居相似的实体（如跨语言概念或异构命名习惯）。因此，FedAnchor 摒弃了单一视角的预测方式，采用 **双模互补推理 (Dual-Mode Complementary Inference)** 策略。
+
+最终的实体对齐相似度得分 $S_{final}(u, v)$ 由结构相似度与语义相似度的线性加权决定：
+
+$$
+S_{final}(u, v) = \alpha \cdot \text{sim}(Z_{struct}^{(u)}, Z_{struct}^{(v)}) + (1-\alpha) \cdot \text{sim}(H_{sem}^{(u)}, H_{sem}^{(v)})
+$$
+
+其中：
+* $Z_{struct}$ 是由训练好的私有 GCN 提取并经公共 MLP 投影后的结构嵌入。
+* $H_{sem}$ 是 Phase 1 产出的高质量语义锚点嵌入。
+* $\alpha \in [0, 1]$ 是一个 **经验超参数 (Empirical Hyperparameter)**。
+
+需要特别指出的是，参数 $\alpha$ 并非通过梯度下降学习获得，而是作为控制模型偏好的先验因子。在实验中，我们通过在验证集上进行 **网格搜索 (Grid Search)** 来确定每一对数据集的最优 $\alpha$ 值。这一设计赋予了 FedAnchor 极强的适应性：在文本语义丰富的场景下（如 DBP15K），模型会自动偏向较小的 $\alpha$ 以利用语义优势；而在结构信息主导的场景下（如 SRPRS），模型则偏向较大的 $\alpha$ 以依赖拓扑推理。

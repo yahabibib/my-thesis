@@ -1,0 +1,53 @@
+### 3.3.2 主实验结果与对比分析 (Main Experimental Results and Analysis)
+
+为了验证 FedAnchor 在联邦环境下的有效性与鲁棒性，我们从总体对齐性能和图编码器适应性两个维度进行了深入的定量评估。实验结果表明，FedAnchor 不仅显著打破了数据孤岛带来的性能瓶颈，甚至在部分异构性较强的场景下超越了集中式训练的理论上界，展现出优越的泛化能力。
+
+#### 1. 总体对齐性能 (Overall Performance)
+
+首先，我们在 DBP15K 的三个跨语言子集（ZH-EN, JA-EN, FR-EN）上评估了模型的整体表现。为了保证对比的公平性，本组实验统一选取表现最优的 **RGAT (Relation-aware Graph Attention Network)** 作为骨干网络。@tbl-overall-performance 展示了 FedAnchor 与 Isolation（本地训练下界）和 Centralized（集中式训练上界）的详细对比结果。
+
+::: {#tbl-overall-performance}
+| Dataset | Metric | Isolation (Lower Bound) | FedAnchor (Ours) | Centralized (Upper Bound) | Gap (Ours vs Cen) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **ZH-EN** | Hits@1 | 69.21 | **75.13** | 76.91 | -1.78% |
+| | MRR | 0.751 | **0.803** | 0.812 | -0.009 |
+| **JA-EN** | Hits@1 | 70.88 | **72.59** | 72.04 | **+0.55%** |
+| | MRR | 0.768 | **0.787** | 0.776 | **+0.011** |
+| **FR-EN** | Hits@1 | 78.27 | **79.15** | 79.61 | -0.46% |
+| | MRR | 0.814 | **0.819** | 0.822 | -0.003 |
+
+: **Table 3.2: DBP15K 数据集上的总体对齐性能对比**。实验采用 RGAT 作为基础编码器，评价指标为 Hits@1 (%) 和 MRR。FedAnchor 在所有数据集上均显著优于 Isolation，并在 JA-EN 上实现了对集中式训练的反超。
+:::
+
+从 @tbl-overall-performance 的数据中，我们可以归纳出以下关键结论：
+
+* **打破孤岛效应 (Breaking Data Silos)**：
+    与 Isolation 基线相比，FedAnchor 在所有数据集上均取得了显著的性能提升。特别是在 ZH-EN 数据集上，Hits@1 从 69.21% 跃升至 **75.13%**，提升幅度接近 **6%**。这有力地证明了 FedAnchor 通过共享语义投影层 (Shared Projector) 和锚点对齐机制，成功实现了跨机构的知识迁移，有效弥补了单节点数据稀缺带来的局限性。
+
+* **逼近甚至反超集中式训练 (Approaching & Surpassing Centralized Baseline)**：
+    通常情况下，联邦学习被视为集中式训练的一种有损近似。然而，实验结果显示：
+    * 在 FR-EN 数据集上，FedAnchor 与 Centralized 的差距仅为 **0.46%**，达到了**“可比 (Comparable)”**的水平。
+    * **高光发现 (Highlight)**：在 JA-EN 数据集上，FedAnchor 的 Hits@1 (**72.59%**) 和 MRR (**0.787**) 均超越了集中式训练 (72.04% / 0.776)。这一反直觉的现象具有深刻的理论意义。我们认为，这主要归功于联邦平均算法 (FedAvg) 在参数空间引入的 **正则化效应 (Regularization Effect)**。在集中式训练中，模型容易过度拟合特定语言对的噪声模式；而在 FedAnchor 中，各客户端基于本地数据独立计算梯度，服务端仅聚合公共参数，这种分散式的优化路径在一定程度上过滤了局部图结构的噪声干扰，从而提升了模型在异构场景下的泛化能力。
+
+#### 2. 图编码器鲁棒性分析 (Impact of Graph Encoders)
+
+为了验证 FedAnchor 框架是否依赖于特定的图神经网络架构，我们在 ZH-EN 数据集上对比了四种主流图编码器（GCN, SAGE, GAT, RGAT）在不同训练模式下的表现。@tbl-encoder-robustness 详细列出了各模型的 Hits@1 成绩。
+
+::: {#tbl-encoder-robustness}
+| Graph Encoder | Isolation (Local) | FedAnchor (Ours) | Centralized (Global) | Performance Gain (Fed vs Iso) |
+| :--- | :---: | :---: | :---: | :---: |
+| **GCN** | 66.55 | **69.29** | 68.71 | +2.74% |
+| **SAGE** | 66.72 | **68.55** | 70.40 | +1.83% |
+| **GAT** | 69.54 | **75.27** | 75.77 | +5.73% |
+| **RGAT** | 69.21 | **75.13** | 76.91 | **+5.92%** |
+
+: **Table 3.3: 不同图编码器在 ZH-EN 数据集上的鲁棒性分析 (Hits@1 %)**。结果显示 FedAnchor 对所有架构均有提升，且对复杂模型的增益尤为显著。
+:::
+
+分析 @tbl-encoder-robustness，我们可以得出关于架构适应性的两点重要观察：
+
+1.  **模型无关性 (Model Agnosticism)**：
+    无论是由简单邻居聚合驱动的 GCN/SAGE，还是引入注意力机制的 GAT/RGAT，FedAnchor 均能稳定地提升其对齐性能。甚至在使用基础的 GCN 时，FedAnchor (69.29%) 也超越了集中式训练 (68.71%)。这表明本框架提出的“语义锚点+结构解耦”范式具有高度的通用性，不依赖于底层编码器的具体实现，能够无缝集成到现有的图学习生态中。
+
+2.  **复杂模型受益更显著 (Complex Models Benefit More)**：
+    横向对比不同编码器的增益幅度，我们发现高容量模型（如 GAT 和 RGAT）通过联邦学习获得的性能提升（约 **+6%**）显著高于简单模型（如 SAGE 的 +1.83%）。这是因为注意力机制 (Attention) 和关系感知 (Relation-aware) 模块通常需要更多的数据样本来拟合复杂的特征分布。在 Isolation 模式下，有限的本地数据导致这些复杂模型极易过拟合；而 FedAnchor 通过引入高质量的全局语义锚点作为强监督信号，充分释放了复杂模型的表达能力，使其能够捕捉更细粒度的对齐特征。

@@ -1,0 +1,25 @@
+# 第三章 基于联邦语义锚点与解耦架构的知识图谱对齐框架
+
+{{< include chapters/ch3/3.1-problem.qmd >}}
+
+## 3.2 框架设计
+
+{{< include chapters/ch3/3.2-framework/3.2.1-overview.qmd >}}
+
+{{< include chapters/ch3/3.2-framework/3.2.2-semantic.qmd >}}
+
+{{< include chapters/ch3/3.2-framework/3.2.3-structure.qmd >}}
+
+{{< include chapters/ch3/3.2-framework/3.2.4-maturity.qmd >}}
+
+## 3.3 实验与分析
+
+{{< include chapters/ch3/3.3-experiments/3.3.1-setup.qmd >}}
+
+{{< include chapters/ch3/3.3-experiments/3.3.2-results.qmd >}}
+
+{{< include chapters/ch3/3.3-experiments/3.3.3-ablation.qmd >}}
+
+{{< include chapters/ch3/3.3-experiments/3.3.4-privacy.qmd >}}
+
+{{< include chapters/ch3/3.4-summary.qmd >}}

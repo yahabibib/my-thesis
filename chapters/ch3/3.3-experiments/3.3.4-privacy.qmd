@@ -1,0 +1,38 @@
+### 3.3.4 联邦通信开销与隐私分析 (Federated Communication Overhead & Privacy Analysis)
+
+除了在对齐精度上的显著提升，FedAnchor 在通信效率与隐私保护方面同样展现出卓越的性能。本节通过复杂度分析与定量计算，证明了本框架具有 $O(1)$ 的通信复杂度以及独特的“三重隐私防护”机制。
+
+#### 1. 通信复杂度与带宽优势 (Communication Complexity & Bandwidth Advantage)
+
+在传统的联邦知识图谱嵌入方法（如 FedE 等基于嵌入传输的框架）中，客户端需在每轮通信中上传全体实体的嵌入矩阵。设实体总数为 $N$，嵌入维度为 $d$，则其通信复杂度为 $\mathcal{O}(N \times d)$。这种与图规模呈线性增长的开销，在面对百万级节点的大规模图谱时将成为难以逾越的带宽瓶颈。
+
+相比之下，FedAnchor 采用了基于 **模型传输 (Model-Transfer)** 的策略。得益于解耦架构设计，客户端仅需上传公共投影头 ($\Phi_{pub}$) 的参数，而私有图编码器参数与实体嵌入均保留在本地。设公共 MLP 的参数量为 $|\Phi_{pub}|$，则 FedAnchor 的通信复杂度为 $\mathcal{O}(|\Phi_{pub}|)$。由于 $|\Phi_{pub}|$ 仅取决于模型深度与隐藏层维度，与实体数量 $N$ 完全解耦，因此本框架实现了相对于图规模的 **$O(1)$ 常数级通信复杂度**。
+
+::: {#fig-comm-cost}
+![](images/comm_cost_analysis.png){width=80%}
+
+**Figure 3.10: 通信开销随图规模变化的趋势对比 (Communication Cost vs. Scale)**。
+坐标轴 X 为实体数量 $N$ ($10^4$ 至 $10^6$)；Y 轴为通信数据量 (MB)。Baseline (Traditional FL) 呈现为一条陡峭上升的直线，表明通信量随 $N$ 线性爆炸；而 FedAnchor (Ours) 呈现为一条贴近 X 轴的水平直线，表明通信量恒定，不受图规模扩展影响。
+:::
+
+为了量化这一优势，我们在 DBP15K (ZH-EN) 数据集上进行了精确计算。该数据集包含 $N=19,388$ 个实体，目标维度 $d_{out}=768$ (SBERT 空间)。
+
+* **基线通信量**：传输实体嵌入矩阵需消耗 $19,388 \times 768 \times 4 \text{ Bytes} \approx \mathbf{59.6 \text{ MB/round}}$。
+* **FedAnchor 通信量**：本实验采用的 MLP 投影层架构为 `Linear(600->600) + BN + ReLU + Dropout + Linear(600->768)`。其参数总量约为 $823,368$ 个（包含权重与偏置）。传输该模型仅需 $823,368 \times 4 \text{ Bytes} \approx \mathbf{3.14 \text{ MB/round}}$。
+
+计算结果表明，在当前数据规模下，FedAnchor 实现了约 **19倍** 的压缩比。更为关键的是，若我们将场景扩展至千万级工业图谱（例如 $N=1,000,000$），基线方法的通信量将暴增至不可接受的 **3 GB/round**，而 FedAnchor 依然稳定保持在 **3.14 MB/round**。这种极致的 **扩展性 (Scalability)** 使得 FedAnchor 极其适合部署在带宽受限的边缘计算环境中。
+
+#### 2. 多层次隐私保护机制 (Multi-level Privacy Protection Mechanism)
+
+安全性是联邦学习的核心诉求。不同于仅关注数据隐私的通用联邦框架，FedAnchor 针对知识图谱的特性，构建了从数据到模型的三重隐私防线 (**Triple Privacy Defense**)：
+
+* **Level 1: 原始数据隐私 (Data Privacy)**
+  这是联邦学习的基础防线。在 FedAnchor 中，所有的原始三元组 $(h, r, t)$ 以及实体的文本描述信息均严格存储于本地客户端。各参与方之间不存在任何形式的数据交换或对齐种子共享，从源头上杜绝了敏感内容泄露的风险。
+
+* **Level 2: 拓扑结构隐私 (Topological Privacy)**
+  知识图谱的邻接矩阵 $A$ 往往蕴含着高度敏感的商业机密（如社交网络中的关系链、金融网络中的交易流）。在 FedAnchor 中，邻接矩阵仅作为私有编码器 $f_{pri}$ 的输入在本地参与计算，既不被上传至服务端，也不在客户端间传输。这种设计确保了图谱的拓扑结构对于外部观察者是完全不可见的。
+
+* **Level 3: 模型隐私与梯度黑盒 (Model Privacy - Unique Advantage)**
+  这是 FedAnchor 区别于传统联邦学习（通常共享所有模型参数）的独家优势。得益于 **解耦架构 (Decoupled Architecture)**，客户端的私有编码器（如 GAT, Hidden=600）及其参数 $\Theta_{pri}$ 始终保留在本地，仅有公共投影层 $\Phi_{pub}$ 对服务端可见。
+  
+  这一设计构建了一个天然的“黑盒”：服务端只能观测到经过 MLP 非线性映射后的梯度更新，而无法获知生成这些梯度的底层编码器架构及参数。这使得攻击者发动 **梯度反转攻击 (Gradient Inversion Attack)** 试图重构原始输入或图结构的难度呈指数级上升。因为在缺乏私有编码器先验知识的情况下，从高层语义梯度反推底层拓扑结构在数学上是一个极度 **病态 (Ill-posed)** 且难以收敛的问题。
