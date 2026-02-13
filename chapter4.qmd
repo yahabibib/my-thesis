@@ -1,0 +1,32 @@
+# 第四章 基于联邦知识图谱对齐的全球海洋法智慧服务系统
+
+## 4.1 需求分析与应用场景
+
+{{< include chapters/ch4/4.1-background.qmd >}}
+
+## 4.2 系统总体架构设计
+
+{{< include chapters/ch4/4.2/4.2.1-architecture.qmd >}}
+
+{{< include chapters/ch4/4.2/4.2.2-architecture.qmd >}}
+
+## 4.3 核心功能模块实现
+
+{{< include chapters/ch4/4.3/4.3.1-modules.qmd >}}
+
+{{< include chapters/ch4/4.3/4.3.2-modules.qmd >}}
+
+{{< include chapters/ch4/4.3/4.3.3-modules.qmd >}}
+
+## 4.4 系统演示
+
+{{< include chapters/ch4/4.4/4.4.1-demonstration.qmd >}}
+
+{{< include chapters/ch4/4.4/4.4.2-demonstration.qmd >}}
+
+{{< include chapters/ch4/4.4/4.4.3-demonstration.qmd >}}
+
+
+## 4.5 本章小结
+
+{{< include chapters/ch4/4.5-summary.qmd >}}
