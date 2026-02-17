@@ -11,6 +11,7 @@ book:
     - chapter2.qmd
     - chapter3.qmd
     - chapter4.qmd
+    - references.qmd
 
 format:
   html:
@@ -21,6 +22,9 @@ format:
     toc: true
     number-sections: false    # <---【关键】关闭章节自动编号
     highlight-style: github
+    reference-doc: custom-reference.docx  # 指向你刚才DIY的文件
+    fig-align: center    # 图片默认居中
 
 bibliography: references.bib
+csl: chinese-gb7714-2015.csl
 # 注意：不要加 crossref 配置块
