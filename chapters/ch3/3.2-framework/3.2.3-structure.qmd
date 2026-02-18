@@ -1,94 +1,39 @@
 ### 3.2.3 联邦解耦图编码器与自适应课程对齐
 
-本节详细阐述 FedAnchor 的核心算法机制。为了在联邦环境中兼顾图结构的异构性与语义空间的统一性，我们提出了一套由 **私有解耦编码 (Private Decoupled Encoding)**、**锚点引导蒸馏 (Anchor-Guided Distillation)** 以及 **自适应课程学习 (Adaptive Curriculum Learning)** 构成的完整算法框架。
+FedAnchor 的核心算法机制旨在联邦环境中兼顾图结构的异构性与语义空间的统一性。为此，我们构建了一套由私有解耦编码、锚点引导蒸馏以及自适应课程学习构成的完整算法框架。在联邦知识图谱对齐任务中，设第 $k$ 个客户端维护着一个本地私有的知识图谱 $G_k = (\mathcal{V}_k, \mathcal{E}_k, X_k)$，其中 $\mathcal{V}_k$ 表示实体集合，$\mathcal{E}_k$ 为关系边集合，$X_k \in \mathbb{R}^{|\mathcal{V}_k| \times d_{in}}$ 为实体的初始特征矩阵。为了解决各机构间图拓扑结构密度不一致导致的模型异构性问题，并严格防止私有邻接矩阵的泄露，我们设计了私有-公共解耦架构，将模型的前向传播过程分解为两个独立阶段。
 
-#### 1 异构图结构的私有编码
-
-在联邦知识图谱对齐任务中，设第 $k$ 个客户端（Client $k$）维护着一个本地私有的知识图谱 $G_k = (\mathcal{V}_k, \mathcal{E}_k, X_k)$，其中 $\mathcal{V}_k$ 表示实体集合，$\mathcal{E}_k$ 为关系边集合，$X_k \in \mathbb{R}^{|\mathcal{V}_k| \times d_{in}}$ 为实体的初始特征矩阵。
-
-为了解决各机构间图拓扑结构密度不一致导致的模型异构性问题，并严格防止私有邻接矩阵 $A_k$ 的泄露，我们设计了 **私有-公共解耦架构 (Private-Shared Decoupling Architecture)**。该架构将模型的前向传播过程分解为两个独立阶段：
-
-**1. 私有结构特征提取 (Private Structural Extraction)**
-
-首先，客户端利用本地私有编码器 $f_{pri}$ 提取节点特定的拓扑嵌入。由于该层参数仅在本地更新，不同客户端可根据自身图数据的稀疏程度，异构地选择最适配的图神经网络（GNN）变体（如 GCN, GAT 或 RGAT）。形式化定义如下：
+首先，客户端利用本地私有编码器 $f_{pri}$ 提取节点特定的拓扑嵌入。由于该层参数仅在本地更新，不同客户端可根据自身图数据的稀疏程度，异构地选择最适配的图神经网络变体（如 GCN, GAT 或 RGAT）。该过程的形式化定义如下：
 
 $$
 H_k^{(stru)} = f_{pri}(G_k, X_k; \Theta_{pri}^{(k)})
 $$
 
-其中 $H_k^{(stru)} \in \mathbb{R}^{|\mathcal{V}_k| \times d_{hidden}}$ 为结构特征，$\Theta_{pri}^{(k)}$ 为第 $k$ 个客户端独有的私有参数集合，严禁参与联邦聚合。
-
-**2. 公共语义空间投影 (Shared Semantic Projection)**
-
-随后，为了将异构的结构特征映射到统一的度量空间，我们引入了一个全局共享的投影器 $f_{pub}$。该组件通常由多层感知机（MLP）构成，充当连接私有拓扑空间与公共语义空间的桥梁：
+其中 $H_k^{(stru)} \in \mathbb{R}^{|\mathcal{V}_k| \times d_{hidden}}$ 为结构特征，$\Theta_{pri}^{(k)}$ 为第 $k$ 个客户端独有的私有参数集合，严禁参与联邦聚合。随后，为了将异构的结构特征映射到统一的度量空间，我们引入了一个全局共享的投影器 $f_{pub}$。该组件通常由多层感知机构成，充当连接私有拓扑空间与公共语义空间的桥梁：
 
 $$
 Z_k = f_{pub}(H_k^{(stru)}; \Phi_{pub})
 $$
 
-其中 $Z_k \in \mathbb{R}^{|\mathcal{V}_k| \times d_{out}}$ 为最终用于对齐的结构嵌入，$\Phi_{pub}$ 为公共参数集合，参与服务端的联邦聚合（Aggregation）。
+其中 $Z_k \in \mathbb{R}^{|\mathcal{V}_k| \times d_{out}}$ 为最终用于对齐的结构嵌入，$\Phi_{pub}$ 为公共参数集合，参与服务端的联邦聚合。这种设计在参数层面实现了隐私与效用的分离：私有编码器负责捕获本地特有的拓扑模式，而公共投影器则负责学习通用的语义映射规则。
 
-::: {#tbl-decoupling}
-| 组件名称 (Component) | 符号表示 (Symbol) | 共享状态 (Shared?) | 异构性 (Heterogeneity) | 功能描述 (Function Description) |
-| :--- | :---: | :---: | :---: | :--- |
-| **私有编码器** | $f_{pri}(\cdot; \Theta_{pri}^{(k)})$ | ❌ Local Only | ✅ Supported | 提取本地特定的图拓扑特征，保护邻接矩阵隐私 |
-| **公共投影器** | $f_{pub}(\cdot; \Phi_{pub})$ | ✅ Federated | ❌ Unified | 将异构结构特征非线性映射至统一的语义坐标系 |
-| **私有图结构** | $G_k$ | ❌ Local Only | ✅ High | 各客户端独有的实体关系网络，具有不同的密度分布 |
-
-: **Table 3.1: 参数解耦策略概览 (Parameter Decoupling Strategy)**。该表展示了 FedAnchor 如何通过分离 $\Theta_{pri}$ 和 $\Phi_{pub}$ 来平衡隐私保护与知识共享。
-:::
-
-#### 2 语义锚点引导的对齐目标
-
-在获得结构嵌入 $Z_k$ 后，传统的对齐方法通常采用双向训练，即同时更新结构视图和语义视图。然而，在联邦异构环境下，这种双向更新极易导致 **“对齐漂移 (Alignment Drift)”**，即两个视图在缺乏绝对坐标系的情况下共同退化。
-
-为此，FedAnchor 采用了 **锚点引导的单向蒸馏 (Anchor-Guided Unidirectional Distillation)** 策略。利用 Phase 1 预训练好的 SBERT 语义嵌入作为 **冻结的教师信号 (Frozen Teacher Signal)**，记为 $H^{(sem)}$。对于任意实体 $u \in \mathcal{V}_k$，其对应的语义锚点 $h_u^{(sem)}$ 在 Phase 2 保持不变（Stop Gradient）。
-
-我们将对齐问题建模为对比学习任务，采用 InfoNCE Loss 强制结构嵌入逼近语义锚点。对于实体 $u$，其损失函数定义为：
+在获得结构嵌入 $Z_k$ 后，传统的对齐方法通常采用双向训练，即同时更新结构视图和语义视图。然而，在联邦异构环境下，这种双向更新极易导致“对齐漂移”，即两个视图在缺乏绝对坐标系的情况下共同退化。为此，FedAnchor 采用了锚点引导的单向蒸馏策略。利用上一阶段预训练好的 SBERT 语义嵌入作为冻结的教师信号，记为 $H^{(sem)}$。对于任意实体 $u \in \mathcal{V}_k$，其对应的语义锚点 $h_u^{(sem)}$ 在此阶段保持梯度截断。我们将对齐问题建模为对比学习任务，采用 InfoNCE 损失函数强制结构嵌入逼近语义锚点。对于实体 $u$，其损失函数定义为：
 
 $$
 \mathcal{L}_{align}^{(k)} = - \frac{1}{|\mathcal{V}_k|} \sum_{u \in \mathcal{V}_k} \log \frac{\exp(\text{sim}(z_u, h_u^{(sem)}) / \tau)}{\sum_{v \in \mathcal{N}_{neg}} \exp(\text{sim}(z_u, h_v^{(sem)}) / \tau)}
 $$
 
-其中：
-* $z_u \in Z_k$ 是实体 $u$ 的结构嵌入（学生）。
-* $h_u^{(sem)}$ 是实体 $u$ 的语义锚点（教师，梯度截断）。
-* $\mathcal{N}_{neg}$ 是批次内的负样本集合（即 $v \neq u$ 的其他实体锚点）。
-* $\tau$ 是温度系数（Temperature），用于调节对齐分布的锐度。
+其中 $z_u \in Z_k$ 是实体 $u$ 的结构嵌入（学生），$h_u^{(sem)}$ 是实体 $u$ 的语义锚点（教师），$\mathcal{N}_{neg}$ 是批次内的负样本集合，$\tau$ 是用于调节对齐分布锐度的温度系数。该损失函数的梯度反向传播仅作用于 $z_u$ 及其生成路径（即 $\Phi_{pub}$ 和 $\Theta_{pri}^{(k)}$），从而实现了从“文本模态”到“结构模态”的单向知识蒸馏。
 
-该损失函数的梯度反向传播仅作用于 $z_u$ 及其生成路径（即 $\Phi_{pub}$ 和 $\Theta_{pri}^{(k)}$），从而实现了从“文本模态”到“结构模态”的单向知识蒸馏。
-
-::: {#fig-anchor-distillation}
-![](images/anchor_distillation_concept.png){width=80%}
-
-**Figure 3.3: 语义锚点蒸馏示意图 (Anchor Distillation)**。图中展示了一个二维特征空间。中心是一个黄色的五角星（代表固定的语义锚点 $h_u^{(sem)}$），周围散布着若干蓝色的圆形（代表迭代中的结构嵌入 $z_u$）。图中只存在从圆形指向五角星的单向箭头，表示结构特征在 Loss 驱动下被不断“拉”向静止的语义锚点，而锚点本身不发生位移。
-:::
-
-#### 3 自适应课程学习优化 
-
-在训练初期（Cold Start），由于结构编码器参数 $\Theta_{pri}$ 和 $\Phi_{pub}$ 是随机初始化的，生成的结构嵌入 $Z_k$ 分布极其混乱。此时若直接强加严格的 InfoNCE 对齐约束，模型极易陷入局部最优或产生剧烈的梯度震荡。
-
-为了缓解这一问题，FedAnchor 引入了 **动态偏置课程学习 (Dynamic Bias Curriculum Learning)** 机制。该机制的核心思想是在训练过程中动态调整正样本对的 Logits 值，使任务难度从“简单模式”平滑过渡到“困难模式”。
-
-我们定义修正后的相似度得分 $s(u, v)$ 如下：
+尽管上述蒸馏框架提供了明确的优化方向，但在训练初期，由于结构编码器参数是随机初始化的，生成的结构嵌入分布极其混乱。此时若直接强加严格的 InfoNCE 对齐约束，模型极易陷入局部最优或产生剧烈的梯度震荡。为了缓解这一问题，FedAnchor 引入了动态偏置课程学习机制。该机制的核心思想是在训练过程中动态调整正样本对的 Logits 值，使任务难度从“简单模式”平滑过渡到“困难模式”。我们定义修正后的相似度得分 $s(u, v)$ 如下：
 
 $$
 s(u, v) = \cos(z_u, h_v^{(sem)}) + \beta_t \cdot \mathbb{I}(u=v)
 $$
 
-其中 $\mathbb{I}(u=v)$ 是指示函数，仅当 $u$ 和 $v$ 为同一实体（正样本对）时生效；$\beta_t \geq 0$ 是随通信轮次 $t$ 变化的动态偏置项。
-
-$\beta_t$ 的衰减调度函数设计为线性下降：
+其中 $\mathbb{I}(u=v)$ 是仅当 $u$ 和 $v$ 为同一实体时生效的指示函数；$\beta_t \geq 0$ 是随通信轮次 $t$ 变化的动态偏置项。$\beta_t$ 的衰减调度函数设计为线性下降：
 
 $$
 \beta_t = \max \left( 0, \beta_{start} - \frac{t}{T_{total}} (\beta_{start} - \beta_{end}) \right)
 $$
 
-* **热身阶段 (Warm-up Phase, Large $\beta_t$)**：在训练初期，较大的 $\beta_t$（如 0.2）人为地提升了正样本的相似度得分。根据 Softmax 的性质，这会降低正样本的 Loss 值，从而减缓梯度幅度。这相当于给模型提供了一个“高容忍度”的环境，使其能够先学习粗粒度的结构特征，避免因初始误差过大而崩溃。
-* **微调阶段 (Fine-tuning Phase, $\beta_t \to 0$)**：随着 $t$ 增加，$\beta_t$ 逐渐归零。此时模型必须完全依靠结构嵌入 $z_u$ 本身与锚点 $h_u^{(sem)}$ 的余弦相似度来获取高分。这迫使编码器捕捉更细粒度的拓扑差异，实现严格的精确对齐。
-
-::: {#fig-bias-decay}
-![](images/bias_decay_curve.png){width=85%}
-
-**Figure 3.4: 动态偏置衰减曲线 (Dynamic Bias Decay)**。坐标系横轴为通信轮次 (Communication Rounds, $t$)，纵轴为偏置值 (Bias Value, $\beta_t$)。图中绘制了一条从 $\beta_{start}=0.2$ 线性下降至 $\beta_{end}=0.0$ 的实线。图表背景被划分为两个区域：左侧浅绿色区域标注为 "Warm-up Phase (Easy Mode)"，右侧浅红色区域标注为 "Fine-tuning Phase (Hard Mode)"，直观展示了课程学习的难度渐进过程。
-:::
+在热身阶段，较大的 $\beta_t$ 人为地提升了正样本的相似度得分，根据 Softmax 的性质，这会降低正样本的损失值，从而减缓梯度幅度，相当于给模型提供了一个“高容忍度”的环境。随着训练轮次 $t$ 增加，$\beta_t$ 逐渐归零，模型进入微调阶段，必须完全依靠结构嵌入本身与锚点的余弦相似度来获取高分。这种由易到难的课程设置迫使编码器逐步捕捉更细粒度的拓扑差异，最终实现严格的精确对齐。
