@@ -29,3 +29,7 @@
 {{< include chapters/ch2/2.3-plm/2.3.1-bert.qmd >}}
 
 {{< include chapters/ch2/2.3-plm/2.3.2-sbert.qmd >}}
+
+## 2.4 本章小结
+
+{{< include chapters/ch2/2.4-summary.qmd >}}

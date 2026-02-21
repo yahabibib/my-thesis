@@ -2,9 +2,9 @@
 
 实体对齐（Entity Alignment, EA）旨在识别并连接不同知识图谱中指代现实世界同一对象的实体。在基于表示学习的框架下，该任务通常被建模为低维向量空间中的几何邻近性问题。为了便于后续章节的模型推导，本节首先对知识图谱及对齐任务进行形式化定义。
 
-1. 知识图谱：形式化地，一个多关系知识图谱被定义为有向图 $\mathcal{G} = (\mathcal{E}, \mathcal{R}, \mathcal{T}_R)$，其中 $\mathcal{E}$ 表示实体集合，$\mathcal{R}$ 表示关系集合，$\mathcal{T}_R = \{(h, r, t) | h, t \in \mathcal{E}, r \in \mathcal{R}\}$ 表示关系三元组集合。考虑到在实际应用中，属性信息对于消除实体歧义具有重要作用，我们参考 Sun 等人的标准定义 [@Sun2017]，将知识图谱扩展为 $\mathcal{G} = (\mathcal{E}, \mathcal{R}, \mathcal{A}, \mathcal{V}, \mathcal{T})$。其中 $\mathcal{A}$ 为属性名称集合，$\mathcal{V}$ 为属性值集合，$\mathcal{T}$ 包含两类三元组：关系三元组 $\mathcal{T}_R$ 和属性三元组 $\mathcal{T}_A = \{(e, a, v) | e \in \mathcal{E}, a \in \mathcal{A}, v \in \mathcal{V}\}$。
+1.知识图谱：形式化地，一个多关系知识图谱被定义为有向图 $\mathcal{G} = (\mathcal{E}, \mathcal{R}, \mathcal{T}_R)$，其中 $\mathcal{E}$ 表示实体集合，$\mathcal{R}$ 表示关系集合，$\mathcal{T}_R = \{(h, r, t) | h, t \in \mathcal{E}, r \in \mathcal{R}\}$ 表示关系三元组集合。考虑到在实际应用中，属性信息对于消除实体歧义具有重要作用，我们参考 Sun 等人的标准定义 [@Sun2017]，将知识图谱扩展为 $\mathcal{G} = (\mathcal{E}, \mathcal{R}, \mathcal{A}, \mathcal{V}, \mathcal{T})$。其中 $\mathcal{A}$ 为属性名称集合，$\mathcal{V}$ 为属性值集合，$\mathcal{T}$ 包含两类三元组：关系三元组 $\mathcal{T}_R$ 和属性三元组 $\mathcal{T}_A = \{(e, a, v) | e \in \mathcal{E}, a \in \mathcal{A}, v \in \mathcal{V}\}$。
 
-2. 实体对齐：给定源知识图谱 $\mathcal{G}_s = (\mathcal{E}_s, \mathcal{R}_s, \mathcal{T}_s)$ 和目标知识图谱 $\mathcal{G}_t = (\mathcal{E}_t, \mathcal{R}_t, \mathcal{T}_t)$，通常假设两者的实体集不相交，即 $\mathcal{E}_s \cap \mathcal{E}_t = \emptyset$。实体对齐的目标是学习一个映射函数 $\psi: \mathcal{E}_s \rightarrow \mathcal{E}_t$，使得对于任意 $e_s \in \mathcal{E}_s$，如果目标图中存在其等价实体 $e_t$，则 $\psi(e_s) = e_t$。
+2.实体对齐：给定源知识图谱 $\mathcal{G}_s = (\mathcal{E}_s, \mathcal{R}_s, \mathcal{T}_s)$ 和目标知识图谱 $\mathcal{G}_t = (\mathcal{E}_t, \mathcal{R}_t, \mathcal{T}_t)$，通常假设两者的实体集不相交，即 $\mathcal{E}_s \cap \mathcal{E}_t = \emptyset$。实体对齐的目标是学习一个映射函数 $\psi: \mathcal{E}_s \rightarrow \mathcal{E}_t$，使得对于任意 $e_s \in \mathcal{E}_s$，如果目标图中存在其等价实体 $e_t$，则 $\psi(e_s) = e_t$。
 
 在基于嵌入的范式下，上述映射过程在数学上转化为共享向量空间中的最近邻搜索问题。具体而言，模型通过学习参数 $\theta$，将实体映射为低维向量 $\mathbf{h} \in \mathbb{R}^d$。此时，预测函数 $\psi$ 定义为寻找目标空间中与源实体距离最近的向量：
 
