@@ -1,112 +1,21 @@
 ### 4.3.1 基于 Cesium 的三维海域态势感知实现
 
-作为“全球海洋法智慧服务系统”的表现层核心，三维海域态势感知模块承担着多源空间数据的可视化与人机交互重任。本节详细阐述如何在 React 单页应用框架中集成 Cesium.js 引擎，重点解决高精度地球容器的构建、矢量海域数据的动态渲染以及基于射线投射的空间坐标拾取算法实现。
+在跨国航运海事合规与风险协同系统中，三维海域态势感知模块承担着多源空间数据的可视化与人机交互重任。本节详细阐述如何在React单页应用框架中集成Cesium.js引擎，重点解决高精度地球容器的构建、矢量海域数据的动态渲染以及基于射线投射的空间坐标拾取算法实现。
 
-#### 1. 三维地球容器构建 
+首先，三维地球容器构建。为了在React组件生命周期中稳定管理Cesium实例，本模块采用useRef钩子引用DOM节点，并在useEffect中执行初始化逻辑。初始化配置的核心在于挂载适合深海显示的ArcGIS深蓝底图，并剥离冗余的UI控件以最大化航线规划与全局合规监控视野。核心初始化代码如下：
 
-为了在 React 组件生命周期中稳定管理 Cesium 实例，我们采用 `useRef` 钩子引用 DOM 节点，并在 `useEffect` 中执行初始化逻辑。初始化配置的核心在于挂载适合深海显示的 ArcGIS 深蓝底图，并剥离冗余的 UI 控件以最大化执法视野。
+::: {#fig-cesium}
+![](images/cesium_init.png){width=90%}
+:::
 
-核心初始化代码如下：
+其次，多源时空图层渲染。本系统采用GeoJSON作为诸如特定港口排放控制区或高频商业航道等合规边界的标准数据格式。通过Cesium.GeoJsonDataSource异步加载数据后，本模块遍历实体集合，依据type属性动态映射多边形的材质颜色，进而实现多级别合规风险与航线安全状态的直观视觉表达。关键渲染逻辑如下：
 
-```javascript
-import React, { useEffect, useRef } from 'react';
-import * as Cesium from 'cesium';
+::: {#fig-cesium}
+![](images/cesium_init.png){width=90%}
+:::
 
-const MaritimeGlobe = () => {
-  const cesiumContainer = useRef(null);
+最后，交互式空间查询算法。本系统与后端联邦对齐引擎联动的关键在于精确的空间坐标拾取。前端利用射线投射算法将屏幕二维像素坐标转换为三维地理坐标，并作为锚点触发后端的跨国合规逻辑推理与风险审查。核心坐标转换算法如下：
 
-  useEffect(() => {
-    if (cesiumContainer.current) {
-      // 核心初始化逻辑
-      const viewer = new Cesium.Viewer(cesiumContainer.current, {
-        // 1. 挂载 ArcGIS 海洋底图 (World Ocean Base)
-        imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
-          url: 'https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer'
-        }),
-        // 2. 禁用时间轴、VR模式等非核心控件，最大化地图视野
-        timeline: false,
-        animation: false,
-        baseLayerPicker: false,
-        vrButton: false,
-        contextOptions: { webgl: { alpha: true } }
-      });
-
-      // 3. 开启显式渲染以优化性能
-      viewer.scene.requestRenderMode = true;
-      
-      // 加载后续业务模块...
-    }
-  }, []);
-
-  return <div ref={cesiumContainer} style={{ width: '100%', height: '100vh' }} />;
-};
-
-```
-
-#### 2. 多源时空图层渲染
-
-系统采用 GeoJSON 作为海域边界的标准数据格式。通过 `Cesium.GeoJsonDataSource` 异步加载数据后，系统遍历实体（Entity）集合，依据 `type` 属性（如争议区、专属经济区）动态映射多边形的材质颜色，实现“红蓝对抗”的视觉表达。
-
-关键渲染逻辑如下：
-
-```javascript
-const loadMaritimeData = async (viewer) => {
-  // 1. 异步加载 GeoJSON 矢量数据
-  const dataSource = await Cesium.GeoJsonDataSource.load('/assets/data/eez.geojson');
-
-  // 2. 遍历实体，应用条件样式 (Conditional Styling)
-  dataSource.entities.values.forEach(entity => {
-    const type = entity.properties.type?.getValue();
-    
-    if (Cesium.defined(entity.polygon)) {
-      switch (type) {
-        case 'Disputed_Area': 
-          // 争议海域：高亮红色警示
-          entity.polygon.material = Cesium.Color.RED.withAlpha(0.4);
-          entity.polygon.outlineColor = Cesium.Color.RED;
-          break;
-        case 'EEZ':
-        default:
-          // 本国管辖海域：半透明蓝色
-          entity.polygon.material = Cesium.Color.CORNFLOWERBLUE.withAlpha(0.15);
-      }
-      entity.polygon.height = 0; // 强制贴地
-    }
-  });
-
-  viewer.dataSources.add(dataSource);
-};
-
-```
-
-#### 3. 交互式空间查询算法
-
-系统与后端联邦对齐引擎（FedAnchor）联动的关键在于精确的空间坐标拾取。前端利用 **射线投射算法 (Ray-casting)** 将屏幕二维像素坐标转换为三维地理坐标，并作为锚点触发后端的法律知识推理。
-
-核心坐标转换算法如下：
-
-```javascript
-const setupInteraction = (viewer) => {
-  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-
-  // 监听鼠标左键点击
-  handler.setInputAction((movement) => {
-    // 1. 射线投射：从摄像机位置穿过屏幕点击点
-    const ray = viewer.camera.getPickRay(movement.position);
-
-    // 2. 计算射线与地球椭球体的交点 (笛卡尔坐标)
-    const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
-
-    if (cartesian) {
-      // 3. 坐标系转换：笛卡尔坐标 (x,y,z) -> 地理坐标 (Lat/Lon)
-      const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-      const longitude = Cesium.Math.toDegrees(cartographic.longitude);
-      const latitude = Cesium.Math.toDegrees(cartographic.latitude);
-
-      // 4. 触发后端 FedAnchor 联邦对齐查询
-      queryFedAnchorEngine({ lat: latitude, lon: longitude });
-    }
-  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-};
-
-```
+::: {#fig-cesium}
+![](images/cesium_init.png){width=90%}
+:::
