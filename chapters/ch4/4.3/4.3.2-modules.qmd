@@ -1,110 +1,15 @@
 ### 4.3.2 基于多进程微服务的联邦对齐服务实现
 
-为了在物理层面模拟真实世界中跨机构的数据隔离现状，并保障系统在高并发执法场景下的响应速度，本系统后端采用 **gRPC** 高性能远程过程调用框架构建。架构上设计为“一中心、多边缘”的微服务拓扑，中心服务器与边缘节点通过独立的操作系统进程进行隔离，确保了计算资源的独立调度与数据的绝对安全。
+为了在物理层面模拟真实世界中跨国航运企业与港口监管机构的数据隔离现状，并保障系统在高频次跨国航线合规审查场景下的响应速度，本系统后端采用gRPC高性能远程过程调用框架构建。架构上设计为“一中心、多边缘”的微服务拓扑，中心服务器与边缘节点通过独立的操作系统进程进行隔离，确保了计算资源的独立调度与数据的绝对安全。
 
-#### 1 联邦通信协议设计
+本系统选用Protocol Buffers定义跨语言的标准通信接口。相比于JSON，Protobuf的二进制序列化机制显著降低了联邦网络中的带宽开销。接口设计遵循最小化数据交换原则，请求仅传输语义向量，响应仅返回脱敏后的对齐结果。核心接口定义如下：
 
-系统选用 **Protocol Buffers (IDL)** 定义跨语言的标准通信接口。相比于 JSON，Protobuf 的二进制序列化机制显著降低了联邦网络中的带宽开销。接口设计遵循“最小化数据交换”原则，请求仅传输语义向量，响应仅返回脱敏后的对齐结果。
+::: {#fig-cesium}
+![](images/cesium_init.png){width=90%}
+:::
 
-核心接口定义 (`federation.proto`) 如下：
+其次，物理隔离节点的独立进程部署。为了坚守核心商业机密不出本地的隐私红线，分别代表航运企业内部运营规章的客户端 A、代表普适性国际海事公约的客户端 B 以及代表特定挂靠港口地方法规的客户端 C 均被严格封装为独立的gRPC服务进程。各进程拥有独立的内存空间，分别加载互不可见的本地知识库。客户端核心启动逻辑如下，通过端口绑定实现物理隔离：
 
-```protobuf
-syntax = "proto3";
-package federation;
-
-service AlignmentService {
-  // 核心 RPC：接收语义锚点，返回对齐结果
-  rpc Align (AlignRequest) returns (AlignResponse) {}
-}
-
-message AlignRequest {
-  repeated float anchor_embedding = 1; // SBERT 生成的语义向量
-  int32 top_k = 2;                     // 请求返回数量
-}
-
-message EntityResult {
-  string entity_id = 1;       // 实体 ID
-  float score_struct = 2;     // 结构相似度 (GCN/RGAT)
-  float score_sem = 3;        // 语义相似度 (SBERT)
-  string source_client = 4;   // 数据来源标识
-}
-
-message AlignResponse {
-  repeated EntityResult results = 1;
-}
-
-```
-
-#### 2 物理隔离节点的独立进程部署
-
-为了满足“数据不出域”的隐私刚性需求，Client A (国内法)、Client B (国际法) 和 Client C (判例库) 被封装为独立的 gRPC 服务进程。各进程拥有独立的内存空间，分别加载互不可见的本地知识库。
-
-Client 端核心启动逻辑如下，通过端口绑定实现物理隔离：
-
-```python
-class AlignmentServicer(federation_pb2_grpc.AlignmentServiceServicer):
-    def __init__(self, data_path):
-        # 初始化本地知识库：数据仅加载到当前进程内存，外部不可见
-        self.local_kg = LocalKnowledgeGraph(data_path)
-
-    def Align(self, request, context):
-        # 在本地计算相似度，仅返回分数和 ID
-        return self.local_kg.search_nearest_neighbors(
-            anchor_vector=request.anchor_embedding, 
-            top_k=request.top_k
-        )
-
-def serve(port, data_path):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
-    federation_pb2_grpc.add_AlignmentServiceServicer_to_server(
-        AlignmentServicer(data_path), server
-    )
-    # 绑定特定端口 (如 5001, 5002, 5003)
-    server.add_insecure_port(f'[::]:{port}')
-    server.start()
-    server.wait_for_termination()
-
-```
-
-#### 3 并行查询分发与加权聚合引擎
-
-Server 端充当联邦调度器。为了降低系统整体延迟 (Latency)，Server 采用 `ThreadPoolExecutor` 实现全双工并行调度，同时向三个 Client 发起请求。在结果回收阶段，依据双模加权公式  对异构结果进行归一化重排序。
-
-核心调度与聚合算法如下：
-
-```python
-# 双模融合超参数 (α)
-ALPHA = 0.3 
-
-def dispatch_query(anchor_embedding):
-    """联邦并发调度与结果聚合"""
-    aggregated_results = []
-    
-    # 1. 并行分发 (Parallel Dispatch)
-    # 使用线程池同时请求所有节点，总耗时取决于最慢的节点
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        future_to_client = {
-            executor.submit(call_grpc_client, client, anchor_embedding): client 
-            for client in FEDERATED_CLIENTS
-        }
-        
-        for future in as_completed(future_to_client):
-            if response := future.result():
-                aggregated_results.extend(response.results)
-
-    # 2. 双模加权聚合 (Weighted Aggregation)
-    final_ranked_list = []
-    for item in aggregated_results:
-        # 应用核心融合公式
-        final_score = (ALPHA * item.score_struct) + ((1 - ALPHA) * item.score_sem)
-        
-        final_ranked_list.append({
-            'id': item.entity_id,
-            'source': item.source_client,
-            'score': final_score
-        })
-
-    # 3. 全局重排序并返回 Top-K
-    return sorted(final_ranked_list, key=lambda x: x['score'], reverse=True)[:10]
-
-```
+::: {#fig-cesium}
+![](images/cesium_init.png){width=90%}
+:::
